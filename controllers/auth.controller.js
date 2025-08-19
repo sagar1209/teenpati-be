@@ -1,272 +1,163 @@
-const { db } = require("../config/database");
-const { User, Role } = db;
-const { Op } = require("sequelize");
-const authService = require("../services/auth.service");
-const bcrypt = require("bcrypt");
+const Joi = require("joi");
 const jwt = require("jsonwebtoken");
+const { db } = require("../config/database");
+const { Role } = db;
+const authService = require("../services/auth.service");
+const { ROLE } = require("../constants/rolePermission.constant");
 const { ENV_VARIABLE } = require("../constants/envVariable.constant");
+const { validateSchema } = require("../utils/validator.util");
+const { generatehashPassword, comparePassword } = require("../utils/hash.util");
+const {
+  sendSuccessResponse,
+  sendErrorResponse,
+} = require("../utils/response.util");
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
 
-// Register new user
 const register = async (req, res) => {
+  const transaction = await db.sequelize.transaction();
   try {
-    const { username, email, contact_number, password, role_id } = req.body;
-
-    // Validation
-    if (!username || !email || !password || !role_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Username, email, password, and role_id are required"
-      });
-    }
-
-    // Check if username already exists
-    const existingUsername = await authService.findUser({ where: { username } });
-    if (existingUsername) {
-      return res.status(400).json({
-        success: false,
-        message: "Username already exists"
-      });
-    }
-
-    // Check if email already exists
-    const existingEmail = await authService.findUser({ where: { email } });
-    if (existingEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists"
-      });
-    }
-
-    // Check if contact number already exists (if provided)
-    if (contact_number) {
-      const existingContact = await authService.findUser({ where: { contact_number } });
-      if (existingContact) {
-        return res.status(400).json({
-          success: false,
-          message: "Contact number already exists"
-        });
-      }
-    }
-
-    // Validate role exists
-    const role = await Role.findByPk(role_id);
-    if (!role) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid role_id"
-      });
-    }
-
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Prepare user data
-    const userData = {
-      username,
-      email,
-      contact_number,
-      password: hashedPassword,
-      role_id,
-      is_verified: false // Default to false, can be verified later
-    };
-
-    // Create user
-    const newUser = await authService.registerUser(userData);
-
-    // Remove password from response
-    const userResponse = {
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
-      contact_number: newUser.contact_number,
-      role_id: newUser.role_id,
-      is_verified: newUser.is_verified,
-      createdAt: newUser.createdAt
-    };
-
-    res.status(201).json({
-      success: true,
-      message: "User registered successfully",
-      data: userResponse
+    const schema = Joi.object({
+      username: Joi.string().required(),
+      email: Joi.string().email().required(),
+      contact_number: Joi.string().allow(null).optional(),
+      password: Joi.string().min(8).required(),
     });
 
+    const { error, value } = validateSchema(schema, req.body);
+
+    if (error) {
+      return sendErrorResponse(res, [], error.details[0].message, 400);
+    }
+
+    const hashedPassword = await generatehashPassword(value.password);
+
+    // get user role id
+    const userRole = await authService.findRole({
+      where: { role_name: ROLE.USER },
+    });
+
+    const user = await authService.registerUser(
+      {
+        ...value,
+        password: hashedPassword,
+        role_id: userRole.id,
+      },
+      transaction
+    );
+
+    // Generate verification code (OTP)
+    const otp_code = generateVerificationCode();
+    const expirationTimeInMinutes = 5;
+    const expiration = new Date(Date.now() + expirationTimeInMinutes * 60000);
+
+    // Add auth code
+    await authService.addAuthCode(
+      {
+        user_id: user.id,
+        otp_code,
+        expiration,
+      },
+      transaction
+    );
+
+    await transaction.commit();
+    return sendSuccessResponse(
+      res,
+      user,
+      "Code has been sent successfully",
+      201
+    );
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message
-    });
+    await transaction.rollback();
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to register user",
+      500
+    );
   }
 };
 
-// Login user
 const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    // Validate request body using common validation utility
+    const schema = Joi.object({
+      username: Joi.string().required(),
+      password: Joi.string().min(8).required(),
+    });
 
-    // Validation
-    if (!username || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Username and password are required"
-      });
+    const { error, value } = validateSchema(schema, req.body);
+
+    if (error) {
+      return sendErrorResponse(res, [], error.details[0].message, 400);
     }
 
-    // Find user by username or email
+    const { username, password } = value;
+
+    // Find user by username
     const user = await authService.findUser({
-      where: {
-        [Op.or]: [
-          { username: username },
-          { email: username }
-        ]
-      },
-      include: [{
-        model: Role,
-        as: 'role'
-      }]
+      where: { username: username },
+      include: [
+        {
+          model: Role,
+          as: "role",
+        },
+      ],
     });
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials"
-      });
-    }
-
-    // Check if user is verified
-    if (!user.is_verified) {
-      return res.status(401).json({
-        success: false,
-        message: "Account not verified. Please verify your account first."
-      });
+      return sendErrorResponse(res, [], "User not found", 404);
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials"
-      });
+      return sendErrorResponse(res, [], "Invalid password", 401);
     }
 
     // Generate JWT token
     const tokenPayload = {
-      id: user.id,
+      userId: user.id,
       username: user.username,
-      email: user.email,
       role_id: user.role_id,
-      role_name: user.role?.role_name
+      email: user.email,
     };
 
-    const token = jwt.sign(
-      tokenPayload,
-      ENV_VARIABLE.JWT_SECRET,
-      { expiresIn: ENV_VARIABLE.JWT_TOKEN_EXPIRATION || '24h' }
-    );
+    const token = jwt.sign(tokenPayload, ENV_VARIABLE.JWT_SECRET, {
+      expiresIn: ENV_VARIABLE.JWT_TOKEN_EXPIRATION,
+    });
 
-    // Remove password from response
     const userResponse = {
       id: user.id,
       username: user.username,
       email: user.email,
       contact_number: user.contact_number,
       role_id: user.role_id,
-      role_name: user.role?.role_name,
-      is_verified: user.is_verified
+      role_name: user.role.role_name,
     };
 
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      data: {
+    return sendSuccessResponse(
+      res,
+      {
+        token: token,
         user: userResponse,
-        token: token
-      }
-    });
-
+      },
+      "User logged in successfully",
+      200
+    );
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message
-    });
-  }
-};
-
-// Get current user profile
-const getProfile = async (req, res) => {
-  try {
-    const userId = req.user.id; // From JWT middleware
-
-    const user = await authService.findUser({
-      where: { id: userId },
-      include: [{
-        model: Role,
-        as: 'role'
-      }]
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
-    }
-
-    // Remove password from response
-    const userResponse = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      contact_number: user.contact_number,
-      role_id: user.role_id,
-      role_name: user.role?.role_name,
-      is_verified: user.is_verified,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
-    };
-
-    res.status(200).json({
-      success: true,
-      data: userResponse
-    });
-
-  } catch (error) {
-    console.error("Get profile error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message
-    });
-  }
-};
-
-// Logout (client-side token removal)
-const logout = async (req, res) => {
-  try {
-    // In a stateless JWT system, logout is handled client-side
-    // You can implement token blacklisting here if needed
-    res.status(200).json({
-      success: true,
-      message: "Logout successful"
-    });
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message
-    });
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to login user",
+      500
+    );
   }
 };
 
 module.exports = {
   register,
   login,
-  getProfile,
-  logout
 };

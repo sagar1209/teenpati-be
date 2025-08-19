@@ -22,6 +22,10 @@ const findUser = async (query) => {
   return await User.findOne(query);
 };
 
+const findRole = async (query) => {
+  return await Role.findOne(query);
+};
+
 const updateUserById = async (id, value, transaction) => {
   return await User.update(value, {
     where: { id },
@@ -32,5 +36,6 @@ const updateUserById = async (id, value, transaction) => {
 module.exports = {
   registerUser,
   findUser,
+  findRole,
   updateUserById,
 };
