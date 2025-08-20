@@ -1,8 +1,12 @@
 const Joi = require("joi");
-const { sendErrorResponse } = require("./response.util");
+const { ApiError } = require("./apiError.util");
 
 const validateSchema = (schema, data) => {
-    return schema.validate(data);
+    const { error, value } = schema.validate(data);
+    if(error){
+        throw new ApiError(error.details[0].message, 400);
+    }
+    return value;
 };
 
 module.exports = {

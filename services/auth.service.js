@@ -27,6 +27,7 @@ const findRole = async (query) => {
 };
 
 const updateUserById = async (id, value, transaction) => {
+  console.log(value,id);
   return await User.update(value, {
     where: { id },
     transaction,

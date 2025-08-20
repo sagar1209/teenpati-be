@@ -1,6 +1,6 @@
 const { db } = require("../config/database");
 const { ENV_VARIABLE } = require("../constants/envVariable.constant");
-const { PaymentImage } = db;
+const { PaymentImage, TransactionHistory } = db;
 const { deleteImage } = require("../utils/multer.util");
 
 const storeImage = async (value) => {
@@ -30,7 +30,40 @@ const getImage = async () => {
   return result;
 };
 
+const createTransaction = async (value, transaction) => {
+  const result = await TransactionHistory.create(value, { transaction });
+  return result;
+};
+
+const findTransaction = async (query) => {
+  const result = await TransactionHistory.findOne(query);
+  return result;
+};
+
+const updateTransactionById = async (id, value, transaction) => {
+  const result = await TransactionHistory.update(value, {
+    where: { id },
+    transaction,
+  });
+  return result;
+};
+
+const findAllTransaction = async (query) => {
+  const result = await TransactionHistory.findAll(query);
+  return result;
+};
+
+const countTransaction = async (query) => {
+  const result = await TransactionHistory.count(query);
+  return result;
+};  
+
 module.exports = {
   storeImage,
   getImage,
+  createTransaction,
+  findTransaction,
+  updateTransactionById,
+  findAllTransaction,
+  countTransaction,
 };

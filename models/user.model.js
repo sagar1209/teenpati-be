@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
 				type: DataTypes.BOOLEAN,
 				allowNull: false,
 				defaultValue: false
+			},
+			balance: {
+				type: DataTypes.DECIMAL,
+				allowNull: false,
+				defaultValue: 0.00
 			}
 		},
 		{

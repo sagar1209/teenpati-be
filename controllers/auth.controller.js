@@ -11,6 +11,7 @@ const {
   sendSuccessResponse,
   sendErrorResponse,
 } = require("../utils/response.util");
+const { ApiError } = require("../utils/apiError.util");
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -82,17 +83,12 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    // Validate request body using common validation utility
     const schema = Joi.object({
       username: Joi.string().required(),
       password: Joi.string().min(8).required(),
     });
 
-    const { error, value } = validateSchema(schema, req.body);
-
-    if (error) {
-      return sendErrorResponse(res, [], error.details[0].message, 400);
-    }
+    const value = validateSchema(schema, req.body);
 
     const { username, password } = value;
 
@@ -108,13 +104,13 @@ const login = async (req, res) => {
     });
 
     if (!user) {
-      return sendErrorResponse(res, [], "User not found", 404);
+      throw new ApiError("User not found", 404);
     }
 
     // Verify password
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
-      return sendErrorResponse(res, [], "Invalid password", 401);
+      throw new ApiError("Invalid password", 401);
     }
 
     // Generate JWT token
