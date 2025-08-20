@@ -21,13 +21,11 @@ app.use(
   })
 );
 app.use(apiLogger);
-// app.use('/api/images/', express.static('./images'))
-// app.set('view engine', 'ejs');
-// app.set('views', path.join(__dirname, 'emailTemplates/ejsTemplates'));
+app.use('/api/images', express.static('./images'));
 
 app.use('/api', router);
 
-const PORT = ENV_VARIABLE.PORT;
+const PORT = ENV_VARIABLE.PORT; 
 
 app.listen(PORT, async () => {
   try {
