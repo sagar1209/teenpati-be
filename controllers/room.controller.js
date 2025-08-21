@@ -8,6 +8,7 @@ const { validateSchema } = require("../utils/validator.util");
 const Joi = require("joi");
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
+const { ROOM_TYPE, ROOM_LIMIT } = require("../constants/room.constant");
 
 const generateRoomCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -43,11 +44,11 @@ const createPrivateRoom = async (req, res) => {
     }
 
     const roomData = {
-      type: "private",
+      type: ROOM_TYPE.PRIVATE,
       code: generateRoomCode(),
       owner_id: userId,
       pot_amount: value.pot_amount,
-      max_players: 7,
+      max_players: ROOM_LIMIT.PRIVATE,
       current_players: 1,
     };
 
@@ -101,9 +102,9 @@ const createPublicRoom = async (req, res) => {
 
     let room = await roomService.findRoom({
       where: {
-        type: "public",
+        type: ROOM_TYPE.PUBLIC,
         is_active: true,
-        current_players: { [Op.lt]: 5 },
+        current_players: { [Op.lt]: ROOM_LIMIT.PUBLIC },
         pot_amount: value.pot_amount,
       },
     });
@@ -112,9 +113,9 @@ const createPublicRoom = async (req, res) => {
       const roomData = {
         owner_id: userId,
         pot_amount: value.pot_amount,
-        type: "public",
+        type: ROOM_TYPE.PUBLIC,
         is_active: true,
-        max_players: 5,
+        max_players: ROOM_LIMIT.PUBLIC,
         current_players: 1,
       };
       room = await roomService.createRoom(roomData, transaction);
@@ -173,7 +174,7 @@ const joinPrivateRoom = async (req, res) => {
     const room = await roomService.findRoom({
       where: {
         code: value.code,
-        type: "private",
+        type: ROOM_TYPE.PRIVATE,
         is_active: true,
       },
     });
@@ -255,9 +256,13 @@ const leaveRoom = async (req, res) => {
     await roomService.removeUserFromRoom(userId, transaction);
 
     const room = await roomService.findRoom({
-      where: { id: roomUser.room_id },
+      where: { id: roomUser.room_id, is_active: true },
       transaction,
     });
+    if (!room) {
+      throw new ApiError("Room not found", 404);
+    }
+
     await roomService.updateRoomById(
       room.id,
       {

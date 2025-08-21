@@ -1,5 +1,7 @@
 'use strict';
 
+const { ROOM_TYPE } = require("../constants/room.constant");
+
 module.exports = (sequelize, DataTypes) => {
   const Room = sequelize.define(
     "Room",
@@ -11,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false
       },
       type: {
-        type: DataTypes.STRING,
+        type: DataTypes.ENUM(Object.values(ROOM_TYPE)),
         allowNull: false,
       },
       code: {
