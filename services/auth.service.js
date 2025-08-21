@@ -3,10 +3,8 @@ const { User, Role } = db;
 const { Op } = require("sequelize");
 
 const registerUser = async (value, transaction) => {
-  // Check if user already exists
   const existingUser = await findUser({ where: { email: value.email } });
   if (existingUser) {
-    // Delete existing user if found
     await User.destroy({
       where: { email: value.email },
       force: true,

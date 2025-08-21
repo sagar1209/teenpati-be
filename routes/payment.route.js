@@ -1,6 +1,6 @@
 const express = require('express');
 const { createSingleImageUpload, multerErrorHandler } = require('../utils/multer.util');
-const paymentController = require('../controllers/payment.controller');
+const { paymentController } = require('../controllers');
 const { auth } = require('../middlewares/authentication.middleware');
 const { isAdmin, isUser } = require('../middlewares/authorization.middleware');
 

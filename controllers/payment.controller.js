@@ -1,4 +1,4 @@
-const paymentService = require("../services/payment.service");
+const { paymentService } = require("../services");
 const { deleteImage } = require("../utils/multer.util");
 const {
   sendSuccessResponse,
