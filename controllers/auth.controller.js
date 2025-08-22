@@ -2,11 +2,12 @@ const Joi = require("joi");
 const jwt = require("jsonwebtoken");
 const { db } = require("../config/database");
 const { Role } = db;
-const { authService } = require("../services");
+const { authService, paymentService } = require("../services");
 const { ROLE } = require("../constants/rolePermission.constant");
 const { ENV_VARIABLE } = require("../constants/envVariable.constant");
 const { validateSchema } = require("../utils/validator.util");
 const { generatehashPassword, comparePassword } = require("../utils/hash.util");
+const { Op } = require("sequelize");
 const {
   sendSuccessResponse,
   sendErrorResponse,
@@ -153,7 +154,137 @@ const login = async (req, res) => {
   }
 };
 
+const getProfile = async (req, res) => {
+  try {
+    const user = await authService.findUser({
+      where: { id: req.user.id },
+      attributes: { exclude: ["password"] },
+      include: [
+        {
+          model: Role,
+          as: "role",
+        },
+      ],
+    });
+
+    if (!user) {
+      throw new ApiError("User not found", 404);
+    }
+
+    const trancationHistory = await paymentService.findAllTransaction({
+      where: { user_id: req.user.id },
+      order: [["createdAt", "DESC"]],
+    });
+
+    return sendSuccessResponse(
+      res,
+      {
+        user,
+        trancationHistory,
+      },
+      "Profile fetched successfully",
+      200
+    );
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to get profile",
+      500
+    );
+  }
+};
+
+const updateProfile = async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const schema = Joi.object({
+      username: Joi.string().pattern(/^[A-Za-z0-9]+$/).message('Username can only contain letters (a-z) and numbers').optional(),
+      contact_number: Joi.string().optional(),
+    });
+
+    const value = validateSchema(schema, req.body);
+
+    if (value.username) {
+      value.username = value.username.trim().toLowerCase();
+      const existingUser = await authService.findUser({
+        where: {
+          username: value.username,
+          id: { [Op.ne]: req.user.id }
+        }
+      });
+
+      if (existingUser) {
+        throw new ApiError("Username already exists", 400);
+      }
+    }
+
+    const user = await authService.updateUserById(req.user.id, value, transaction);
+
+    await transaction.commit();
+    return sendSuccessResponse(res, user, "Profile updated successfully", 200);
+  } catch (error) {
+    await transaction.rollback();
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to update profile",
+      500
+    );
+  }
+};
+
+const changePassword = async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const schema = Joi.object({
+      old_password: Joi.string().required(),
+      new_password: Joi.string().min(8).required(),
+    });
+
+    const value = validateSchema(schema, req.body);
+
+    const existingUser = await authService.findUser({
+      where: { id: req.user.id },
+    });
+
+    if (!existingUser) {
+      throw new ApiError("User not found", 404);
+    }
+
+    const isPasswordValid = await comparePassword(
+      value.old_password,
+      existingUser.password
+    );
+
+    if (!isPasswordValid) {
+      throw new ApiError("Invalid password", 401);
+    }
+
+    const hashedPassword = await generatehashPassword(value.new_password);
+    await authService.updateUserById(
+      existingUser.id,
+      { password: hashedPassword },
+      transaction
+    );
+
+    await transaction.commit();
+    return sendSuccessResponse(res, [], "Password changed successfully", 200);
+  } catch (error) {
+    await transaction.rollback();
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to change password",
+      500
+    );
+  }
+};
+
 module.exports = {
   register,
   login,
+  getProfile,
+  updateProfile,
+  changePassword,
 };

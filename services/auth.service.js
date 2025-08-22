@@ -29,11 +29,11 @@ const findAllUsers = async (query) => {
   return await User.findAll(query);
 };
 const updateUserById = async (id, value, transaction) => {
-  console.log(value,id);
-  return await User.update(value, {
+  const user = await User.update(value, {
     where: { id },
     transaction,
   });
+  return user;
 };
 
 const countUsers = async (query) => { 
