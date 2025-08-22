@@ -11,6 +11,8 @@ router.post('/public-room', auth, isUser, roomController.createPublicRoom);
 router.post('/join-private-room', auth, isUser, roomController.joinPrivateRoom);
 
 // Room management routes
+router.get('/get-all', auth, isAdmin, roomController.getAllRooms);
+router.get('/:id', auth, roomController.getRoomById);
 router.post('/leave-room', auth, isUser, roomController.leaveRoom);
 
 module.exports = router;

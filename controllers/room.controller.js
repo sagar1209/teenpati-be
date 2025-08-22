@@ -9,6 +9,8 @@ const Joi = require("joi");
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 const { ROOM_TYPE, ROOM_LIMIT } = require("../constants/room.constant");
+const { db } = require("../config/database");
+const { User } = db;
 
 const generateRoomCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -285,9 +287,112 @@ const leaveRoom = async (req, res) => {
   }
 };
 
+const getAllRooms = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      rows = 10,
+      pagination = "true",
+      type = "all",
+      sort = "updatedAt",
+      order = "DESC",
+    } = req.query;
+    const paginationOptions =
+      pagination == "true"
+        ? {
+            limit: rows,
+            offset: (page - 1) * rows,
+          }
+        : {};
+
+    const where = {
+      type: type == "all" ? { [Op.ne]: null } : type,
+      is_active: true,
+    };
+
+    const rooms = await roomService.findAllRoom({
+      where,
+      ...paginationOptions,
+      order: [[sort, order]],
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+    });
+
+    const totalRows = await roomService.countRoom({
+      where,
+    });
+
+    return sendSuccessResponse(
+      res,
+      {
+        rooms,
+        totalCount: totalRows,
+      },
+      "Rooms fetched successfully",
+      200
+    );
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Failed to get all rooms",
+      error.statusCode || 500
+    );
+  }
+};
+
+const getRoomById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let room = await roomService.findRoom({
+      where: {
+        id,
+        is_active: true,
+        current_players: { [Op.gt]: 0 },
+      },
+    });
+
+    if (!room) {
+      throw new ApiError("Room not found", 404);
+    }
+
+    room = await roomService.findRoom({
+      where: { id },
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+        {
+          model: User,
+          as: "players",
+          attributes: ["id", "username", "email", "balance"],
+        },
+      ],
+    });
+
+    return sendSuccessResponse(res, room, "Room fetched successfully", 200);
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Failed to get room by id",
+      error.statusCode || 500
+    );
+  }
+};
+
 module.exports = {
   createPrivateRoom,
   createPublicRoom,
   joinPrivateRoom,
   leaveRoom,
+  getAllRooms,
+  getRoomById,
 };

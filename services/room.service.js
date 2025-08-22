@@ -40,6 +40,16 @@ const removeUserFromRoom = async (userId, transaction) => {
   });
 };
 
+const findAllRoom = async (query) => {
+  const rooms = await Room.findAll(query);
+  return rooms;
+};
+
+const countRoom = async (query) => {
+  const totalRows = await Room.count(query);
+  return totalRows;
+};
+
 module.exports = {
   createRoom,
   findRoomUser,
@@ -47,4 +57,6 @@ module.exports = {
   findRoom,
   updateRoomById,
   removeUserFromRoom,
+  findAllRoom,
+  countRoom,
 };
