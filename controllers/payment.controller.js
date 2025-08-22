@@ -269,13 +269,13 @@ const depositHistory = async (req, res) => {
       status = "pending",
     } = req.query;
 
-    const paginationOptions =
-      pagination == "true"
-        ? {
-            limit: rows,
-            offset: (page - 1) * rows,
-          }
-        : {};
+      const paginationOptions =
+        pagination == "true"
+          ? {
+              limit: rows,
+              offset: (page - 1) * rows,
+            }
+          : {};
 
     const transactionRecords = await paymentService.findAllTransaction({
       where: {
@@ -358,6 +358,56 @@ const withdrawHistory = async (req, res) => {
   }
 };
 
+const getAllTransactionsByUserId = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      rows = 10,
+      pagination = "true",
+      sort = "updatedAt",
+      order = "DESC",
+    } = req.query;
+
+    const { id } = req.params;
+
+    const paginationOptions =
+      pagination == "true"
+        ? {
+            limit: rows,
+            offset: (page - 1) * rows,
+          }
+        : {};
+
+    const transactionRecords = await paymentService.findAllTransaction({
+      where: {
+        user_id: id,
+      },
+      ...paginationOptions,
+      order: [[sort, order]],
+    });
+
+    const totalRows = await paymentService.countTransaction({
+      where: {
+        user_id: id,
+      },
+    });
+
+    return sendSuccessResponse(
+      res,
+      { transactionRecords, totalCount: totalRows },
+      "Transactions",
+      200
+    );
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Failed to get withdraw history",
+      500
+    );
+  }
+};
+
 module.exports = {
   uploadImage,
   getImage,
@@ -367,4 +417,5 @@ module.exports = {
   rejectTransaction,
   depositHistory,
   withdrawHistory,
+  getAllTransactionsByUserId,
 };

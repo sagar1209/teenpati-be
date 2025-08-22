@@ -24,6 +24,10 @@ const findRole = async (query) => {
   return await Role.findOne(query);
 };
 
+
+const findAllUsers = async (query) => {
+  return await User.findAll(query);
+};
 const updateUserById = async (id, value, transaction) => {
   console.log(value,id);
   return await User.update(value, {
@@ -32,9 +36,15 @@ const updateUserById = async (id, value, transaction) => {
   });
 };
 
+const countUsers = async (query) => { 
+  return await User.count(query);
+};
+
 module.exports = {
   registerUser,
   findUser,
   findRole,
+  findAllUsers,
   updateUserById,
+  countUsers,
 };
