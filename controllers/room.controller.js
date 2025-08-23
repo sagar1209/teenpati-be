@@ -11,6 +11,7 @@ const { sequelize } = require("../config/database");
 const { ROOM_TYPE, ROOM_LIMIT } = require("../constants/room.constant");
 const { db } = require("../config/database");
 const { User } = db;
+const logger = require("../utils/logger.util");
 
 const generateRoomCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -20,6 +21,17 @@ const generateRoomCode = () => {
   }
   return code;
 };
+
+const getSocketHandlers = () => {
+  if (global.socketHandlers && global.socketHandlers.room) {
+    return global.socketHandlers.room;
+  }
+  logger.warn(
+    "Socket handlers not available - real-time updates will not work"
+  );
+  return null;
+};
+
 const createPrivateRoom = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -55,7 +67,19 @@ const createPrivateRoom = async (req, res) => {
     };
 
     const room = await roomService.createRoom(roomData, transaction);
+
     await transaction.commit();
+
+    // Send real-time notification via Socket.IO
+    const socketHandlers = getSocketHandlers();
+    if (socketHandlers) {
+      const creator = {
+        id: req.user.id,
+        email: req.user.email,
+      };
+      socketHandlers.notifyRoomCreated(room, creator);
+    }
+
     return sendSuccessResponse(
       res,
       {
@@ -121,6 +145,18 @@ const createPublicRoom = async (req, res) => {
         current_players: 1,
       };
       room = await roomService.createRoom(roomData, transaction);
+
+      await transaction.commit();
+
+      // Send real-time notification for new room creation
+      const socketHandlers = getSocketHandlers();
+      if (socketHandlers) {
+        const creator = {
+          id: req.user.id,
+          email: req.user.email,
+        };
+        socketHandlers.notifyRoomCreated(room, creator);
+      }
     } else {
       await roomService.addUserToRoom(
         { room_id: room.id, user_id: userId },
@@ -136,9 +172,20 @@ const createPublicRoom = async (req, res) => {
         where: { id: room.id },
         transaction,
       });
+
+      await transaction.commit();
+
+      // Send real-time notification for joining existing room
+      const socketHandlers = getSocketHandlers();
+      if (socketHandlers) {
+        const user = {
+          id: req.user.id,
+          email: req.user.email,
+        };
+        socketHandlers.notifyUserJoinedRoom(room.id, user, room);
+      }
     }
 
-    await transaction.commit();
     return sendSuccessResponse(
       res,
       {
@@ -217,7 +264,24 @@ const joinPrivateRoom = async (req, res) => {
       transaction
     );
 
+    // Get updated room data
+    const updatedRoom = await roomService.findRoom({
+      where: { id: room.id },
+      transaction,
+    });
+
     await transaction.commit();
+
+    // Send real-time notification via Socket.IO
+    const socketHandlers = getSocketHandlers();
+    if (socketHandlers) {
+      const user = {
+        id: req.user.id,
+        email: req.user.email,
+      };
+      socketHandlers.notifyUserJoinedRoom(room.id, user, updatedRoom);
+    }
+
     return sendSuccessResponse(
       res,
       {
@@ -274,7 +338,23 @@ const leaveRoom = async (req, res) => {
       transaction
     );
 
+    const updatedRoom = await roomService.findRoom({
+      where: { id: room.id },
+      transaction,
+    });
+
     await transaction.commit();
+
+    // Send real-time notification via Socket.IO
+    const socketHandlers = getSocketHandlers();
+    if (socketHandlers) {
+      const user = {
+        id: req.user.id,
+        email: req.user.email,
+      };
+      socketHandlers.notifyUserLeftRoom(room.id, user, updatedRoom);
+    }
+
     return sendSuccessResponse(res, null, "Successfully left the room", 200);
   } catch (error) {
     await transaction.rollback();

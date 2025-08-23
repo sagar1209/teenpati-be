@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teen Patti - Real-time Test Client</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, button, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .events {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .event-item {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: white;
+            border-left: 4px solid #007bff;
+            border-radius: 2px;
+        }
+        .event-time {
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .event-data {
+            margin-top: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+        .api-section {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .api-section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .api-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .api-buttons button {
+            margin: 0;
+        }
+        .success { border-left-color: #28a745; }
+        .error { border-left-color: #dc3545; }
+        .info { border-left-color: #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Teen Patti - Real-time Test Client</h1>
+        <p><strong>This client now automatically receives real-time updates when you use the HTTP APIs!</strong></p>
+        
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <input type="text" id="token" placeholder="Enter your JWT token here">
+        </div>
+        
+        <div class="form-group">
+            <label for="potAmount">Pot Amount:</label>
+            <input type="number" id="potAmount" placeholder="Enter pot amount" value="100">
+        </div>
+        
+        <div class="form-group">
+            <label for="roomCode">Room Code (for joining private room):</label>
+            <input type="text" id="roomCode" placeholder="Enter 6-digit room code" maxlength="6">
+        </div>
+        
+        <button id="connectBtn" onclick="connect()">Connect to Socket</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div class="api-section">
+            <h3>🚀 HTTP API Testing (Triggers Real-time Updates)</h3>
+            <p>Use these buttons to test the HTTP APIs. Socket.IO will automatically receive real-time updates!</p>
+            
+            <div class="api-buttons">
+                <button id="createPrivateBtn" onclick="createPrivateRoom()" disabled>Create Private Room</button>
+                <button id="createPublicBtn" onclick="createPublicRoom()" disabled>Join/Create Public Room</button>
+                <button id="joinPrivateBtn" onclick="joinPrivateRoom()" disabled>Join Private Room</button>
+                <button id="leaveRoomBtn" onclick="leaveRoom()" disabled>Leave Room</button>
+            </div>
+        </div>
+        
+        <div class="api-section">
+            <h3>🔌 Socket.IO Connection Testing</h3>
+            <p>Test basic socket connection functionality:</p>
+            
+            <div class="api-buttons">
+                <button id="pingBtn" onclick="sendPing()" disabled>Send Ping</button>
+                <button id="statusBtn" onclick="updateStatus()" disabled>Update Status</button>
+                <button id="typingBtn" onclick="startTyping()" disabled>Start Typing</button>
+            </div>
+        </div>
+        
+        <h3>📡 Real-time Events (Automatic from APIs):</h3>
+        <div id="events" class="events"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let currentRoomId = null;
+        const API_BASE_URL = 'http://localhost:5000';
+
+        function connect() {
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            // Disconnect if already connected
+            if (socket) {
+                socket.disconnect();
+            }
+
+            // Connect to Socket.IO server
+            socket = io('http://localhost:5000', {
+                auth: {
+                    token: token
+                },
+                transports: ['websocket', 'polling'],
+                timeout: 20000,
+                forceNew: true
+            });
+
+            // Connection events
+            socket.on('connect', () => {
+                updateStatus('Connected', true);
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('createPrivateBtn').disabled = false;
+                document.getElementById('createPublicBtn').disabled = false;
+                document.getElementById('joinPrivateBtn').disabled = false;
+                document.getElementById('pingBtn').disabled = false;
+                document.getElementById('statusBtn').disabled = false;
+                document.getElementById('typingBtn').disabled = false;
+                addEvent('Connected to server', { socketId: socket.id }, 'success');
+            });
+
+            socket.on('disconnect', () => {
+                updateStatus('Disconnected', false);
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('createPrivateBtn').disabled = true;
+                document.getElementById('createPublicBtn').disabled = true;
+                document.getElementById('joinPrivateBtn').disabled = true;
+                document.getElementById('leaveRoomBtn').disabled = true;
+                document.getElementById('pingBtn').disabled = true;
+                document.getElementById('statusBtn').disabled = true;
+                document.getElementById('typingBtn').disabled = true;
+                addEvent('Disconnected from server', null, 'error');
+            });
+
+            socket.on('connect_error', (error) => {
+                updateStatus('Connection Error: ' + error.message, false);
+                addEvent('Connection error', { error: error.message }, 'error');
+            });
+
+            // Real-time room events (automatically triggered by API calls)
+            socket.on('room_created', (data) => {
+                addEvent('🎉 Room Created (Real-time)', data, 'success');
+                currentRoomId = data.id;
+                document.getElementById('leaveRoomBtn').disabled = false;
+            });
+
+            socket.on('room_created_success', (data) => {
+                addEvent('✅ Room Created Successfully (Personal)', data, 'success');
+                currentRoomId = data.id;
+                document.getElementById('leaveRoomBtn').disabled = false;
+            });
+
+            socket.on('player_joined', (data) => {
+                addEvent('👤 Player Joined Room (Real-time)', data, 'info');
+            });
+
+            socket.on('room_joined', (data) => {
+                addEvent('🚪 Room Joined Successfully (Personal)', data, 'success');
+                currentRoomId = data.roomId;
+                document.getElementById('leaveRoomBtn').disabled = false;
+            });
+
+            socket.on('player_left', (data) => {
+                addEvent('👋 Player Left Room (Real-time)', data, 'info');
+                if (data.playerId === getUserIdFromToken()) {
+                    currentRoomId = null;
+                    document.getElementById('leaveRoomBtn').disabled = true;
+                }
+            });
+
+            socket.on('room_left', (data) => {
+                addEvent('🚪 Room Left Successfully (Personal)', data, 'success');
+                currentRoomId = null;
+                document.getElementById('leaveRoomBtn').disabled = true;
+            });
+
+            socket.on('room_updated', (data) => {
+                addEvent('🔄 Room Updated (Real-time)', data, 'info');
+            });
+
+            // Base socket events
+            socket.on('pong', (data) => {
+                addEvent('🏓 Pong received', data, 'success');
+            });
+            
+            socket.on('user_status_updated', (data) => {
+                addEvent('👤 User status updated', data, 'info');
+            });
+            
+            socket.on('user_typing', (data) => {
+                addEvent('⌨️ User typing', data, 'info');
+            });
+            
+            socket.on('user_offline', (data) => {
+                addEvent('🔴 User offline', data, 'info');
+            });
+
+            // Error events
+            socket.on('error', (data) => {
+                addEvent('❌ Error received', data, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+            currentRoomId = null;
+        }
+
+        // HTTP API Functions (these will trigger real-time updates automatically)
+        async function createPrivateRoom() {
+            const token = document.getElementById('token').value.trim();
+            const potAmount = document.getElementById('potAmount').value;
+            
+            if (!token || !potAmount) {
+                alert('Please enter token and pot amount');
+                return;
+            }
+
+            try {
+                addEvent('📡 Creating private room via API...', { potAmount }, 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/room/create-private-room`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ pot_amount: parseInt(potAmount) })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addEvent('✅ Private room created via API', data, 'success');
+                    // Socket.IO will automatically receive 'room_created' event
+                } else {
+                    addEvent('❌ Failed to create private room', data, 'error');
+                }
+            } catch (error) {
+                addEvent('❌ API call failed', { error: error.message }, 'error');
+            }
+        }
+
+        async function createPublicRoom() {
+            const token = document.getElementById('token').value.trim();
+            const potAmount = document.getElementById('potAmount').value;
+            
+            if (!token || !potAmount) {
+                alert('Please enter token and pot amount');
+                return;
+            }
+
+            try {
+                addEvent('📡 Joining/creating public room via API...', { potAmount }, 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/room/public-room`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ pot_amount: parseInt(potAmount) })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addEvent('✅ Public room joined/created via API', data, 'success');
+                    // Socket.IO will automatically receive 'player_joined' or 'room_created' event
+                } else {
+                    addEvent('❌ Failed to join/create public room', data, 'error');
+                }
+            } catch (error) {
+                addEvent('❌ API call failed', { error: error.message }, 'error');
+            }
+        }
+
+        async function joinPrivateRoom() {
+            const token = document.getElementById('token').value.trim();
+            const roomCode = document.getElementById('roomCode').value.trim();
+            
+            if (!token || !roomCode) {
+                alert('Please enter token and room code');
+                return;
+            }
+
+            try {
+                addEvent('📡 Joining private room via API...', { roomCode }, 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/room/join-private-room`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ code: roomCode })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addEvent('✅ Private room joined via API', data, 'success');
+                    // Socket.IO will automatically receive 'player_joined' event
+                } else {
+                    addEvent('❌ Failed to join private room', data, 'error');
+                }
+            } catch (error) {
+                addEvent('❌ API call failed', { error: error.message }, 'error');
+            }
+        }
+
+        async function leaveRoom() {
+            const token = document.getElementById('token').value.trim();
+            
+            if (!token) {
+                alert('Please enter token');
+                return;
+            }
+
+            try {
+                addEvent('📡 Leaving room via API...', null, 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/room/leave-room`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addEvent('✅ Room left via API', data, 'success');
+                    // Socket.IO will automatically receive 'player_left' event
+                } else {
+                    addEvent('❌ Failed to leave room', data, 'error');
+                }
+            } catch (error) {
+                addEvent('❌ API call failed', { error: error.message }, 'error');
+            }
+        }
+
+        // Base socket test functions
+        function sendPing() {
+            if (socket && socket.connected) {
+                socket.emit('ping', { message: 'Hello from game client!', timestamp: new Date().toISOString() });
+                addEvent('🏓 Sending ping', { message: 'Hello from game client!' }, 'info');
+            }
+        }
+        
+        function updateStatus() {
+            if (socket && socket.connected) {
+                socket.emit('update_status', { status: 'Playing Teen Patti', timestamp: new Date().toISOString() });
+                addEvent('👤 Updating status', { status: 'Playing Teen Patti' }, 'info');
+            }
+        }
+        
+        function startTyping() {
+            if (socket && socket.connected) {
+                socket.emit('typing_start', { roomId: currentRoomId || 1 });
+                addEvent('⌨️ Starting typing', { roomId: currentRoomId || 1 }, 'info');
+                
+                // Stop typing after 3 seconds
+                setTimeout(() => {
+                    if (socket && socket.connected) {
+                        socket.emit('typing_stop', { roomId: currentRoomId || 1 });
+                        addEvent('⌨️ Stopping typing', { roomId: currentRoomId || 1 }, 'info');
+                    }
+                }, 3000);
+            }
+        }
+
+        function updateStatus(message, connected) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function addEvent(title, data = null, type = 'info') {
+            const eventsDiv = document.getElementById('events');
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event-item event-${type}`;
+            
+            const time = new Date().toLocaleTimeString();
+            let content = `<div class="event-time">${time}</div><strong>${title}</strong>`;
+            
+            if (data) {
+                content += `<div class="event-data">${JSON.stringify(data, null, 2)}</div>`;
+            }
+            
+            eventDiv.innerHTML = content;
+            eventsDiv.appendChild(eventDiv);
+            
+            // Auto-scroll to bottom
+            eventsDiv.scrollTop = eventsDiv.scrollHeight;
+        }
+
+        function getUserIdFromToken() {
+            const token = document.getElementById('token').value.trim();
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    return payload.userId;
+                } catch (e) {
+                    return null;
+                }
+            }
+            return null;
+        }
+    </script>
+</body>
+</html>
