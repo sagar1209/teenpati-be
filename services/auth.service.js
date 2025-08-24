@@ -1,5 +1,5 @@
 const { db } = require("../config/database");
-const { User, Role } = db;
+const { User, Role , AuthCode} = db;
 const { Op } = require("sequelize");
 
 const registerUser = async (value, transaction) => {
@@ -11,7 +11,6 @@ const registerUser = async (value, transaction) => {
       transaction,
     });
   }
-
   const newUser = await User.create(value, { transaction });
   return newUser;
 };
@@ -40,6 +39,36 @@ const countUsers = async (query) => {
   return await User.count(query);
 };
 
+const addAuthCode = async (value, transaction) => {
+  await AuthCode.create(value, { transaction });
+};
+
+const verifyOTP = async (userId, otpCode, transaction) => {
+  const otpRecord = await AuthCode.findOne({
+    where: {
+      user_id: userId
+    },
+    order: [["createdAt", "DESC"]]
+  });
+
+  if (!otpRecord) return false;
+
+  if (
+    otpRecord.otp_code == otpCode &&
+    otpRecord.is_verified === false &&
+    otpRecord.expiration > new Date()
+  ) {
+    await AuthCode.update(
+      { is_verified: true },
+      { where: { id: otpRecord.id }, transaction }
+    );
+
+    return true;
+  }
+
+  return false;
+};
+
 module.exports = {
   registerUser,
   findUser,
@@ -47,4 +76,6 @@ module.exports = {
   findAllUsers,
   updateUserById,
   countUsers,
+  addAuthCode,
+  verifyOTP,
 };

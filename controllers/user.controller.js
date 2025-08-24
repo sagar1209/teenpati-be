@@ -72,7 +72,12 @@ const getAllUsers = async (req, res) => {
       200
     );
   } catch (error) {
-    return sendErrorResponse(res, error, "Failed to fetch users", 500);
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch users",
+      error.statusCode || 500
+    );
   }
 };
 

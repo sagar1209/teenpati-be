@@ -10,8 +10,7 @@ const renderEjsFile = async (fileName, data) => {
 	);
 	const html = await ejs.renderFile(templatePath, {
 		...data,
-		imgSrc: `${ENV_VARIABLE.BACKEND_URL}/images/logo.png`,
-		imgDivider: `${ENV_VARIABLE.BACKEND_URL}/images/round_corners.png`
+		imgSrc: `${ENV_VARIABLE.BACKEND_URL}/api/logo/logo.png`
 	});
 	return html;
 };

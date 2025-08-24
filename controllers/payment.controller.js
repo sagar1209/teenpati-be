@@ -35,7 +35,7 @@ const uploadImage = async (req, res) => {
       res,
       [],
       error.message || "Failed to upload image",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -55,7 +55,7 @@ const getImage = async (req, res) => {
       res,
       [],
       error.message || "Failed to retrieve images",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -91,7 +91,7 @@ const deposit = async (req, res) => {
       res,
       [],
       error.message || "Failed to deposit",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -143,7 +143,7 @@ const withdraw = async (req, res) => {
       res,
       [],
       error.message || "Failed to withdraw",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -214,7 +214,7 @@ const approveTransaction = async (req, res) => {
       res,
       [],
       error.message || "Failed to approve transaction",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -255,7 +255,7 @@ const rejectTransaction = async (req, res) => {
       res,
       [],
       error.message || "Failed to reject transaction",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -304,7 +304,7 @@ const depositHistory = async (req, res) => {
       res,
       [],
       error.message || "Failed to get deposit history",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -353,7 +353,7 @@ const withdrawHistory = async (req, res) => {
       res,
       [],
       error.message || "Failed to get withdraw history",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -403,7 +403,7 @@ const getAllTransactionsByUserId = async (req, res) => {
       res,
       [],
       error.message || "Failed to get withdraw history",
-      500
+      error.statusCode || 500
     );
   }
 };

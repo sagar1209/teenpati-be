@@ -13,6 +13,8 @@ const {
   sendErrorResponse,
 } = require("../utils/response.util");
 const { ApiError } = require("../utils/apiError.util");
+const renderEjsFile = require("../utils/renderEjsFile.util");
+const { sendMailAsync } = require("../utils/sendMail.util");
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -21,33 +23,53 @@ const register = async (req, res) => {
   const transaction = await db.sequelize.transaction();
   try {
     const schema = Joi.object({
-      username: Joi.string().required(),
-      email: Joi.string().email().required(),
+      username: Joi.string()
+        .pattern(/^[A-Za-z0-9]+$/)
+        .message("Username can only contain letters (a-z) and numbers")
+        .min(8)
+        .required()
+        .trim()
+        .lowercase(),
+      email: Joi.string().email().required().lowercase(),
       contact_number: Joi.string().allow(null).optional(),
       password: Joi.string().min(8).required(),
     });
 
-    const { error, value } = validateSchema(schema, req.body);
+    const value = validateSchema(schema, req.body);
 
-    if (error) {
-      return sendErrorResponse(res, [], error.details[0].message, 400);
+    const existingUser = await authService.findUser({
+      where: {
+        email: value.email,
+      },
+    });
+    if (existingUser) {
+      if (existingUser.is_verified) {
+        throw new ApiError("Email already exists", 400);
+      }
+    }
+
+    const existingUserByUsername = await authService.findUser({
+      where: {
+        username: value.username,
+        email: { [Op.ne]: value.email }, // Only check if different email (different person)
+      },
+    });
+
+    if (existingUserByUsername) {
+      throw new ApiError("Username already exists", 400);
     }
 
     const hashedPassword = await generatehashPassword(value.password);
-
     // get user role id
     const userRole = await authService.findRole({
       where: { role_name: ROLE.USER },
     });
 
-    const user = await authService.registerUser(
-      {
-        ...value,
-        password: hashedPassword,
-        role_id: userRole.id,
-      },
-      transaction
-    );
+    value.role_id = parseInt(userRole.id);
+    value.is_active = true;
+    value.password = hashedPassword;
+
+    const user = await authService.registerUser(value, transaction);
 
     // Generate verification code (OTP)
     const otp_code = generateVerificationCode();
@@ -64,6 +86,22 @@ const register = async (req, res) => {
       transaction
     );
 
+    const emailBody = await renderEjsFile(
+      "verificationOTPForRegistrationMAIL.ejs",
+      {
+        otp: otp_code,
+        expirationTimeInMinutes
+      }
+    );
+
+    console.log(emailBody,"emailBody");
+
+    sendMailAsync({
+      email: value.email,
+      subject: `Verify Your Email Address`,
+      body: emailBody
+    });
+
     await transaction.commit();
     return sendSuccessResponse(
       res,
@@ -77,7 +115,7 @@ const register = async (req, res) => {
       res,
       [],
       error.message || "Error to register user",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -85,7 +123,7 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const schema = Joi.object({
-      username: Joi.string().required(),
+      username: Joi.string().required().lowercase().trim(),
       password: Joi.string().min(8).required(),
     });
 
@@ -95,7 +133,7 @@ const login = async (req, res) => {
 
     // Find user by username
     const user = await authService.findUser({
-      where: { username: username },
+      where: { username: username , is_active: true, is_verified: true},
       include: [
         {
           model: Role,
@@ -149,7 +187,61 @@ const login = async (req, res) => {
       res,
       [],
       error.message || "Error to login user",
-      500
+      error.statusCode || 500
+    );
+  }
+};
+
+const verifyOTP = async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const schema = Joi.object({
+      otp: Joi.string().required(),
+      email: Joi.string().email().required().lowercase(),
+    });
+
+    const value = validateSchema(schema, req.body);
+
+    const existingUser = await authService.findUser({
+      where: { email: value.email, is_active: true },
+    });
+
+    if (!existingUser) {
+      throw new ApiError("User not found", 404);
+    }
+
+    // Verify OTP
+    const isVerified = await authService.verifyOTP(
+      existingUser.id,
+      value.otp,
+      transaction
+    );
+
+    if (!isVerified) {
+      throw new ApiError("Invalid OTP", 400);
+    }
+
+    // Update user is_verified to true
+    await authService.updateUserById(
+      existingUser.id,
+      { is_verified: true },
+      transaction
+    );
+
+    await transaction.commit();
+
+    return sendSuccessResponse(
+      res,
+      existingUser,
+      "OTP verified successfully",
+      200
+    );
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Error to verify OTP",
+      error.statusCode || 500
     );
   }
 };
@@ -190,7 +282,7 @@ const getProfile = async (req, res) => {
       res,
       [],
       error.message || "Error to get profile",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -199,7 +291,13 @@ const updateProfile = async (req, res) => {
   const transaction = await db.sequelize.transaction();
   try {
     const schema = Joi.object({
-      username: Joi.string().pattern(/^[A-Za-z0-9]+$/).message('Username can only contain letters (a-z) and numbers').optional(),
+      username: Joi.string()
+        .pattern(/^[A-Za-z0-9]+$/)
+        .message("Username can only contain letters (a-z) and numbers")
+        .min(8)
+        .lowercase()
+        .trim()
+        .optional(),
       contact_number: Joi.string().optional(),
     });
 
@@ -210,8 +308,8 @@ const updateProfile = async (req, res) => {
       const existingUser = await authService.findUser({
         where: {
           username: value.username,
-          id: { [Op.ne]: req.user.id }
-        }
+          id: { [Op.ne]: req.user.id },
+        },
       });
 
       if (existingUser) {
@@ -219,7 +317,11 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    const user = await authService.updateUserById(req.user.id, value, transaction);
+    const user = await authService.updateUserById(
+      req.user.id,
+      value,
+      transaction
+    );
 
     await transaction.commit();
     return sendSuccessResponse(res, user, "Profile updated successfully", 200);
@@ -229,7 +331,7 @@ const updateProfile = async (req, res) => {
       res,
       [],
       error.message || "Error to update profile",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -276,7 +378,7 @@ const changePassword = async (req, res) => {
       res,
       [],
       error.message || "Error to change password",
-      500
+      error.statusCode || 500
     );
   }
 };
@@ -284,6 +386,7 @@ const changePassword = async (req, res) => {
 module.exports = {
   register,
   login,
+  verifyOTP,
   getProfile,
   updateProfile,
   changePassword,

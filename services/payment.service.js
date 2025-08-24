@@ -25,7 +25,7 @@ const getImage = async () => {
   });
 
   // creawte proper url
-  const url = `${ENV_VARIABLE.BASE_URL}/images/payment/${result.image_url}`;
+  const url = `${ENV_VARIABLE.BACKEND_URL}/api/images/payment/${result.image_url}`;
   result.image_url = url;
   return result;
 };

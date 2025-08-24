@@ -23,7 +23,6 @@ module.exports = (sequelize, DataTypes) => {
 			contact_number: {
 				type: DataTypes.STRING,
 				allowNull: true,
-				unique: true
 			},
 			password: {
 				type: DataTypes.STRING,
@@ -42,6 +41,11 @@ module.exports = (sequelize, DataTypes) => {
 				type: DataTypes.DECIMAL,
 				allowNull: false,
 				defaultValue: 0.00
+			},
+			is_active: {
+				type: DataTypes.BOOLEAN,
+				allowNull: false,
+				defaultValue: true
 			}
 		},
 		{

@@ -5,6 +5,7 @@ const { auth } = require('../middlewares/authentication.middleware');
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/verify-otp', authController.verifyOTP);
 
 
 router.get('/profile', auth, authController.getProfile);

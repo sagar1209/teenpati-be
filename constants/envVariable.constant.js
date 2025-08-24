@@ -5,7 +5,7 @@ const ENV_VARIABLE = {
 	NODE_ENV: process.env.NODE_ENV,
 	PORT: process.env.PORT || 5000,
 	DOMAIN: process.env.DOMAIN || "localhost",
-	BASE_URL: process.env.BASE_URL,
+	BACKEND_URL: process.env.BACKEND_URL,
 	// Database configuration
 	DATABASE_URL: process.env.DATABASE_URL,
 	DB_USER: process.env.DB_USER,

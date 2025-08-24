@@ -34,7 +34,7 @@ const auth = async (req, res, next) => {
       ],
     });
 
-    if (!foundUser) {
+    if (!foundUser || !foundUser.is_active) {
       throw new ApiError("User not found", 404);
     }
 

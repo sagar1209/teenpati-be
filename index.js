@@ -39,6 +39,7 @@ app.use(
 );
 app.use(apiLogger);
 app.use('/api/images', express.static('./images'));
+app.use('/api', express.static('./public'));
 
 // Serve test client HTML file
 app.get('/test/test-client.html', (req, res) => {
