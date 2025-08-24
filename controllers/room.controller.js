@@ -66,9 +66,7 @@ const createPrivateRoom = async (req, res) => {
       current_players: 1,
     };
 
-    const room = await roomService.createRoom(roomData, transaction);
-
-    await transaction.commit();
+    let room = await roomService.createRoom(roomData, transaction);
 
     // Send real-time notification via Socket.IO
     const socketHandlers = getSocketHandlers();
@@ -76,9 +74,40 @@ const createPrivateRoom = async (req, res) => {
       const creator = {
         id: req.user.id,
         email: req.user.email,
+        username: req.user.username,
       };
-      socketHandlers.notifyRoomCreated(room, creator);
+
+      const players = await roomService.findAllRoomUser({
+        where: { room_id: room.id },
+        order: [
+          ["createdAt", "ASC"],
+          ["id", "ASC"],
+        ],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "username", "email"],
+          },
+        ],
+        transaction,
+      });
+
+      room = await roomService.findRoom({
+        where: { id: room.id },
+        include: [
+          {
+            model: User,
+            as: "owner",
+            attributes: ["id", "username", "email"],
+          },
+        ],
+        transaction,
+      });
+      socketHandlers.notifyRoomCreated({ room, players, creator });
     }
+
+    await transaction.commit();
 
     return sendSuccessResponse(
       res,
@@ -146,16 +175,42 @@ const createPublicRoom = async (req, res) => {
       };
       room = await roomService.createRoom(roomData, transaction);
 
-      await transaction.commit();
-
       // Send real-time notification for new room creation
       const socketHandlers = getSocketHandlers();
       if (socketHandlers) {
         const creator = {
           id: req.user.id,
           email: req.user.email,
+          username: req.user.username,
         };
-        socketHandlers.notifyRoomCreated(room, creator);
+        const players = await roomService.findAllRoomUser({
+          where: { room_id: room.id },
+          order: [
+            ["createdAt", "ASC"],
+            ["id", "ASC"],
+          ],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "username", "email"],
+            },
+          ],
+          transaction,
+        });
+
+        room = await roomService.findRoom({
+          where: { id: room.id },
+          include: [
+            {
+              model: User,
+              as: "owner",
+              attributes: ["id", "username", "email"],
+            },
+          ],
+          transaction,
+        });
+        socketHandlers.notifyRoomCreated({ room, players, creator });
       }
     } else {
       await roomService.addUserToRoom(
@@ -170,10 +225,15 @@ const createPublicRoom = async (req, res) => {
 
       room = await roomService.findRoom({
         where: { id: room.id },
+        include: [
+          {
+            model: User,
+            as: "owner",
+            attributes: ["id", "username", "email"],
+          },
+        ],
         transaction,
       });
-
-      await transaction.commit();
 
       // Send real-time notification for joining existing room
       const socketHandlers = getSocketHandlers();
@@ -181,10 +241,40 @@ const createPublicRoom = async (req, res) => {
         const user = {
           id: req.user.id,
           email: req.user.email,
+          username: req.user.username,
         };
-        socketHandlers.notifyUserJoinedRoom(room.id, user, room);
+        const players = await roomService.findAllRoomUser({
+          where: { room_id: room.id },
+          order: [
+            ["createdAt", "ASC"],
+            ["id", "ASC"],
+          ],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "username", "email"],
+            },
+          ],
+          transaction,
+        });
+
+        room = await roomService.findRoom({
+          where: { id: room.id },
+          include: [
+            {
+              model: User,
+              as: "owner",
+              attributes: ["id", "username", "email"],
+            },
+          ],
+          transaction,
+        });
+        socketHandlers.notifyUserJoinedRoom({ room, players, user });
       }
     }
+
+    await transaction.commit();
 
     return sendSuccessResponse(
       res,
@@ -220,7 +310,7 @@ const joinPrivateRoom = async (req, res) => {
 
     const userId = req.user.id;
 
-    const room = await roomService.findRoom({
+    let room = await roomService.findRoom({
       where: {
         code: value.code,
         type: ROOM_TYPE.PRIVATE,
@@ -264,14 +354,33 @@ const joinPrivateRoom = async (req, res) => {
       transaction
     );
 
-    // Get updated room data
-    const updatedRoom = await roomService.findRoom({
+    room = await roomService.findRoom({
       where: { id: room.id },
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+      ],
       transaction,
     });
 
-    await transaction.commit();
-
+    const players = await roomService.findAllRoomUser({
+      where: { room_id: room.id },
+      order: [
+        ["createdAt", "ASC"],
+        ["id", "ASC"],
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction,
+    });
     // Send real-time notification via Socket.IO
     const socketHandlers = getSocketHandlers();
     if (socketHandlers) {
@@ -279,8 +388,10 @@ const joinPrivateRoom = async (req, res) => {
         id: req.user.id,
         email: req.user.email,
       };
-      socketHandlers.notifyUserJoinedRoom(room.id, user, updatedRoom);
+      socketHandlers.notifyUserJoinedRoom({ room, players, user });
     }
+
+    await transaction.commit();
 
     return sendSuccessResponse(
       res,
@@ -321,7 +432,7 @@ const leaveRoom = async (req, res) => {
 
     await roomService.removeUserFromRoom(userId, transaction);
 
-    const room = await roomService.findRoom({
+    let room = await roomService.findRoom({
       where: { id: roomUser.room_id, is_active: true },
       transaction,
     });
@@ -338,12 +449,34 @@ const leaveRoom = async (req, res) => {
       transaction
     );
 
-    const updatedRoom = await roomService.findRoom({
+    room = await roomService.findRoom({
       where: { id: room.id },
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+      ],
       transaction,
     });
 
-    await transaction.commit();
+    const players = await roomService.findAllRoomUser({
+      where: { room_id: room.id },
+      order: [
+        ["createdAt", "ASC"],
+        ["id", "ASC"],
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction,
+    });
+
 
     // Send real-time notification via Socket.IO
     const socketHandlers = getSocketHandlers();
@@ -352,10 +485,12 @@ const leaveRoom = async (req, res) => {
         id: req.user.id,
         email: req.user.email,
       };
-      socketHandlers.notifyUserLeftRoom(room.id, user, updatedRoom);
+      socketHandlers.notifyUserLeftRoom({ room, players, user });
     }
 
-    return sendSuccessResponse(res, null, "Successfully left the room", 200);
+    await transaction.commit();
+
+    return sendSuccessResponse(res, [], "Successfully left the room", 200);
   } catch (error) {
     await transaction.rollback();
     return sendErrorResponse(

@@ -40,7 +40,14 @@ app.use(
 app.use(apiLogger);
 app.use('/api/images', express.static('./images'));
 
+// Serve test client HTML file
+app.get('/test/test-client.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'test-client.html'));
+});
+
 app.use('/api', router);
+
+
 
 // Initialize Socket.IO handlers
 const initializeSocketHandlers = require('./socket');

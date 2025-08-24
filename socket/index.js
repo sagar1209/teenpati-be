@@ -1,11 +1,6 @@
 const baseSocketHandler = require('./base.socket');
 const roomSocketHandler = require('./room.socket');
 
-/**
- * Initialize all socket handlers
- * @param {object} io - Socket.IO server instance
- * @returns {object} - Object containing all socket handlers
- */
 const initializeSocketHandlers = (io) => {
   // Initialize base socket handler (handles authentication, common events)
   const baseHandler = baseSocketHandler(io);

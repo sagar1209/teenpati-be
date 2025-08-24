@@ -245,7 +245,7 @@
                 log(`🎉 Room Created (Real-time): ${JSON.stringify(data)}`, 'success');
             });
             
-            socket.on('room_created_success', (data) => {
+            socket.on('room_created', (data) => {
                 log(`✅ Room Created Successfully (Personal): ${JSON.stringify(data)}`, 'success');
             });
             

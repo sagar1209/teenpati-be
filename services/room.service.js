@@ -15,6 +15,11 @@ const findRoomUser = async (query) => {
   return membership;
 };
 
+const findAllRoomUser = async (query) => {
+  const players = await RoomUser.findAll(query);
+  return players;
+};
+
 const addUserToRoom = async (value, transaction) => {
   const membership = await RoomUser.create(value, { transaction });
   return membership;
@@ -53,6 +58,7 @@ const countRoom = async (query) => {
 module.exports = {
   createRoom,
   findRoomUser,
+  findAllRoomUser,
   addUserToRoom,
   findRoom,
   updateRoomById,
