@@ -1,14 +1,5 @@
-const { roomService } = require("../services");
-const { db } = require("../config/database");
-const { User, Room, RoomUser } = require("../config/database");
 const logger = require("../utils/logger.util");
 
-/**
- * Emit real-time update to specific user
- * @param {number} userId - User ID
- * @param {string} event - Event name
- * @param {object} data - Event data
- */
 const emitToUser = (userId, event, data) => {
   try {
     // Get user socket from base socket handler
@@ -143,15 +134,25 @@ const notifyUserLeftRoom = async (value) => {
     // Notify remaining users in the room
     emitToRoom(room.id, "player_left", leaveData);
 
-    // Notify the leaving user
-    emitToUser(user.id, "room_left", {
-      room,
-      message: "Successfully left the room",
-    });
-
-    logger.info(`User ${user.email} left room ${room.id}`);
   } catch (error) {
     logger.error(`Error in notifyUserLeftRoom: ${error.message}`);
+  }
+};
+
+const notifyGameStarted = async (value) => {
+  try {
+    const { room, players, owner } = value;
+    const gameStartData = {
+      room,
+      players,
+      message: `Game started by ${owner.email}`,
+    };
+
+    // Notify all users in the room about game start
+    emitToRoom(room.id, "game_started", gameStartData);
+    logger.info(`Game started in room ${room.id} by ${owner.email}`);
+  } catch (error) {
+    logger.error(`Error in notifyGameStarted: ${error.message}`);
   }
 };
 
@@ -171,6 +172,7 @@ const roomSocketHandler = (io) => {
     notifyRoomCreated,
     notifyUserJoinedRoom,
     notifyUserLeftRoom,
+    notifyGameStarted,
     emitToUser,
     emitToRoom,
   };

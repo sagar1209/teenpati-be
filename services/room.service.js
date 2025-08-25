@@ -38,6 +38,97 @@ const updateRoomById = async (id, value, transaction) => {
   return result;
 };
 
+const updateAllRoomUsers = async (roomId, value, transaction) => {
+  const result = await RoomUser.update(value, {
+    where: { room_id: roomId },
+    transaction,
+  });
+  return result;
+};
+
+const collectPotAmount = async (roomId, potAmount, transaction) => {
+  try {
+    // Get all players in the room
+    const roomUsers = await RoomUser.findAll({
+      where: { room_id: roomId },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "balance"],
+        },
+      ],
+      transaction,
+    });
+
+    const updatePromises = [];
+    const insufficientBalanceUsers = [];
+
+    // Check balance and prepare updates
+    for (const roomUser of roomUsers) {
+      const user = roomUser.user;
+      const currentBalance = parseFloat(user.balance);
+      const requiredAmount = parseFloat(potAmount);
+
+      if (currentBalance < requiredAmount) {
+        insufficientBalanceUsers.push({
+          userId: user.id,
+          currentBalance,
+          requiredAmount,
+        });
+      } else {
+        // Deduct pot amount from user balance
+        updatePromises.push(
+          User.update(
+            { balance: currentBalance - requiredAmount },
+            {
+              where: { id: user.id },
+              transaction,
+            }
+          )
+        );
+      }
+    }
+
+    // If any user has insufficient balance, throw error
+    if (insufficientBalanceUsers.length > 0) {
+      throw new Error(
+        `Insufficient balance for users: ${insufficientBalanceUsers
+          .map((u) => `User ${u.userId} (Balance: ${u.currentBalance}, Required: ${u.requiredAmount})`)
+          .join(", ")}`
+      );
+    }
+
+    // Execute all balance updates
+    await Promise.all(updatePromises);
+
+    // Calculate total pot collected
+    const totalPotCollected = potAmount * roomUsers.length;
+
+    // Update room pot amounts
+    await Room.update(
+      { 
+        current_pot_amount: totalPotCollected,
+        limit_pot_amount: potAmount
+      },
+      {
+        where: { id: roomId },
+        transaction,
+      }
+    );
+
+    return {
+      success: true,
+      playersCount: roomUsers.length,
+      totalPotCollected: totalPotCollected,
+      limitPotAmount: potAmount,
+      currentPotAmount: totalPotCollected,
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
 const removeUserFromRoom = async (userId, transaction) => {
   await RoomUser.destroy({
     where: { user_id: userId },
@@ -62,6 +153,8 @@ module.exports = {
   addUserToRoom,
   findRoom,
   updateRoomById,
+  updateAllRoomUsers,
+  collectPotAmount,
   removeUserFromRoom,
   findAllRoom,
   countRoom,

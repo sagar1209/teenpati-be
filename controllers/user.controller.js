@@ -6,6 +6,7 @@ const { authService } = require("../services");
 const { ROLE } = require("../constants/rolePermission.constant");
 const { ENV_VARIABLE } = require("../constants/envVariable.constant");
 const { validateSchema } = require("../utils/validator.util");
+const { sequelize } = require("../config/database");
 const { generatehashPassword, comparePassword } = require("../utils/hash.util");
 const {
   sendSuccessResponse,
@@ -14,6 +15,31 @@ const {
 const { ApiError } = require("../utils/apiError.util");
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const updateUserById = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+
+    const schema = Joi.object({
+      is_active: Joi.boolean().optional(),
+      balance: Joi.number().optional(),
+    });
+    const value = validateSchema(schema, req.body);
+    const { id } = req.params;
+    const user = await authService.findUser({
+      where: { id },
+    });
+    if (!user) {
+      throw new ApiError("User not found", 404);
+    }
+    await authService.updateUserById(id, value, transaction);
+    await transaction.commit();
+    return sendSuccessResponse(res, user, "User updated successfully", 200);
+  } catch (error) {
+    await transaction.rollback();
+    return sendErrorResponse(res, error, "Failed to update user", error.statusCode || 500);
+  }
 };
 
 const getAllUsers = async (req, res) => {
@@ -82,5 +108,6 @@ const getAllUsers = async (req, res) => {
 };
 
 module.exports = {
+  updateUserById,
   getAllUsers,
 };

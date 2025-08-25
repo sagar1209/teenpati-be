@@ -22,6 +22,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW
+      },
+      status: {
+        type: DataTypes.ENUM('waiting', 'running'),
+        allowNull: false,
+        defaultValue: 'waiting'
       }
     },
     {

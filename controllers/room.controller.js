@@ -64,6 +64,8 @@ const createPrivateRoom = async (req, res) => {
       pot_amount: value.pot_amount,
       max_players: ROOM_LIMIT.PRIVATE,
       current_players: 1,
+      limit_pot_amount: value.pot_amount * 4,
+      room_show_amount: value.pot_amount * 30,
     };
 
     let room = await roomService.createRoom(roomData, transaction);
@@ -172,6 +174,8 @@ const createPublicRoom = async (req, res) => {
         is_active: true,
         max_players: ROOM_LIMIT.PUBLIC,
         current_players: 1,
+        room_show_amount: value.pot_amount * 30,  
+        limit_pot_amount: value.pot_amount * 4,
       };
       room = await roomService.createRoom(roomData, transaction);
 
@@ -561,6 +565,119 @@ const getAllRooms = async (req, res) => {
   }
 };
 
+const startGame = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const userId = req.user.id;
+    
+    // Find the room where user is the owner
+    const room = await roomService.findRoom({
+      where: { 
+        owner_id: userId,
+        is_active: true,
+        game_status: 'waiting'
+      },
+      transaction
+    });
+
+    if (!room) {
+      throw new ApiError("Room not found or you are not the owner", 404);
+    }
+
+    // Check if room has minimum players (at least 2)
+    if (room.current_players < 2) {
+      throw new ApiError("Need at least 2 players to start the game", 400);
+    }
+
+    // Collect pot amount from all players
+    const potCollectionResult = await roomService.collectPotAmount(
+      room.id,
+      room.pot_amount,
+      transaction
+    );
+
+    // Update room game status to running
+    await roomService.updateRoomById(
+      room.id,
+      { game_status: 'running' },
+      transaction
+    );
+
+    // Update all players in the room to running status
+    await roomService.updateAllRoomUsers(
+      room.id,
+      { status: 'running' },
+      transaction
+    );
+
+    // Get updated room and players
+    const updatedRoom = await roomService.findRoom({
+      where: { id: room.id },
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction,
+    });
+
+    const players = await roomService.findAllRoomUser({
+      where: { room_id: room.id },
+      order: [
+        ["createdAt", "ASC"],
+        ["id", "ASC"],
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction,
+    });
+
+    // Send real-time notification via Socket.IO
+    const socketHandlers = getSocketHandlers();
+    if (socketHandlers) {
+      const owner = {
+        id: req.user.id,
+        email: req.user.email,
+        username: req.user.username,
+      };
+      socketHandlers.notifyGameStarted({ room: updatedRoom, players, owner });
+    }
+
+    await transaction.commit();
+
+    return sendSuccessResponse(
+      res,
+      {
+        id: updatedRoom.id,
+        code: updatedRoom.code,
+        type: updatedRoom.type,
+        game_status: updatedRoom.game_status,
+        max_players: updatedRoom.max_players,
+        current_players: updatedRoom.current_players,
+        pot_amount: updatedRoom.pot_amount,
+        pot_collection: potCollectionResult,
+      },
+      "Game started successfully and pot amount collected",
+      200
+    );
+  } catch (error) {
+    await transaction.rollback();
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Failed to start game",
+      error.statusCode || 500
+    );
+  }
+};
+
 const getRoomById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -610,4 +727,5 @@ module.exports = {
   leaveRoom,
   getAllRooms,
   getRoomById,
+  startGame,
 };

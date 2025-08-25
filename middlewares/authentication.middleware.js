@@ -24,7 +24,7 @@ const auth = async (req, res, next) => {
       where: {
         id: decoded.userId,
       },
-      attributes: ["id", "email", "role_id", "balance", "username"],
+      attributes: ["id", "email", "role_id", "balance", "username","is_active"],
       include: [
         {
           model: Role,

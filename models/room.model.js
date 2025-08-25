@@ -48,6 +48,26 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL,
         allowNull: false,
         defaultValue: 0.00,
+      },
+      current_pot_amount: {
+        type: DataTypes.DECIMAL,
+        allowNull: false,
+        defaultValue: 0.00,
+      },
+      limit_pot_amount: {
+        type: DataTypes.DECIMAL,
+        allowNull: false,
+        defaultValue: 0.00,
+      },
+      room_show_amount: {
+        type: DataTypes.DECIMAL,
+        allowNull: false,
+        defaultValue: 0.00,
+      },
+      room_status: {
+        type: DataTypes.ENUM('waiting', 'running'),
+        allowNull: false,
+        defaultValue: 'waiting'
       }
     },
     {

@@ -10,6 +10,9 @@ router.post('/create-private-room', auth, isUser, roomController.createPrivateRo
 router.post('/public-room', auth, isUser, roomController.createPublicRoom);
 router.post('/join-private-room', auth, isUser, roomController.joinPrivateRoom);
 
+// Game management routes
+router.post('/start-game', auth, isUser, roomController.startGame);
+
 // Room management routes
 router.get('/get-all', auth, isAdmin, roomController.getAllRooms);
 router.get('/:id', auth, roomController.getRoomById);
