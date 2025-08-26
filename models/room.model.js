@@ -30,6 +30,16 @@ module.exports = (sequelize, DataTypes) => {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
+      winner_id: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        references: {
+          model: 'users',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      },
       max_players: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -64,6 +74,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0.00,
       },
+      total_collected_amount: {
+        type: DataTypes.DECIMAL,
+        allowNull: false,
+        defaultValue: 0.00,
+      },
       room_status: {
         type: DataTypes.ENUM('waiting', 'running'),
         allowNull: false,
@@ -90,6 +105,12 @@ module.exports = (sequelize, DataTypes) => {
     Room.belongsTo(models.User, {
       foreignKey: "owner_id",
       as: "owner"
+    });
+
+    // Room belongs to User (winner)
+    Room.belongsTo(models.User, {
+      foreignKey: "winner_id",
+      as: "winner"
     });
 
     // Room has many RoomUsers (junction table)

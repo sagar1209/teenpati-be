@@ -141,16 +141,15 @@ const notifyUserLeftRoom = async (value) => {
 
 const notifyGameStarted = async (value) => {
   try {
-    const { room, players, owner } = value;
+    const { room, players } = value;
     const gameStartData = {
       room,
-      players,
-      message: `Game started by ${owner.email}`,
+      players
     };
 
     // Notify all users in the room about game start
-    emitToRoom(room.id, "game_started", gameStartData);
-    logger.info(`Game started in room ${room.id} by ${owner.email}`);
+    emitToRoom(room.id, "collect_pot_amount", gameStartData);
+    logger.info(`Game started in room ${room.id}`);
   } catch (error) {
     logger.error(`Error in notifyGameStarted: ${error.message}`);
   }

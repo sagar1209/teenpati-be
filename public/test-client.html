@@ -255,6 +255,7 @@
           document.getElementById("createPublicBtn").disabled = true;
           document.getElementById("joinPrivateBtn").disabled = true;
           document.getElementById("leaveRoomBtn").disabled = true;
+          document.getElementById("collect_pot_amount").disabled = true;
           document.getElementById("pingBtn").disabled = true;
           document.getElementById("statusBtn").disabled = true;
           document.getElementById("typingBtn").disabled = true;
@@ -301,6 +302,10 @@
           addEvent("🚪 Room Left Successfully (Personal)", data, "success");
           currentRoomId = null;
           document.getElementById("leaveRoomBtn").disabled = true;
+        });
+
+        socket.on('collect_pot_amount', (data) => {
+          addEvent("💰 Collect Pot Amount (Real-time)", data, "info");
         });
 
         socket.on("room_updated", (data) => {

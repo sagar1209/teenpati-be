@@ -47,69 +47,89 @@ const updateAllRoomUsers = async (roomId, value, transaction) => {
 };
 
 const collectPotAmount = async (roomId, potAmount, transaction) => {
-  try {
     // Get all players in the room
     const roomUsers = await RoomUser.findAll({
-      where: { room_id: roomId },
+      where: { room_id: roomId , status: 'waiting'},
       include: [
         {
           model: User,
           as: "user",
-          attributes: ["id", "balance"],
-        },
+          attributes: ["id", "username", "balance"],
+        }
       ],
       transaction,
     });
 
     const updatePromises = [];
-    const insufficientBalanceUsers = [];
+    const roomUserUpdatePromises = [];
+    const usersList = [];
+    let totalPotCollected = 0;
+    let insufficientBalanceCount = 0;
 
     // Check balance and prepare updates
     for (const roomUser of roomUsers) {
       const user = roomUser.user;
       const currentBalance = parseFloat(user.balance);
       const requiredAmount = parseFloat(potAmount);
+      const hasInsufficientBalance = currentBalance < requiredAmount;
+      const newBalance = currentBalance - requiredAmount;
 
-      if (currentBalance < requiredAmount) {
-        insufficientBalanceUsers.push({
-          userId: user.id,
-          currentBalance,
-          requiredAmount,
-        });
-      } else {
+      if (hasInsufficientBalance) {
+        insufficientBalanceCount++;
+      }
+
+      // Add user to the list with all required information
+      usersList.push({
+        userId: user.id,
+        username: user.username,
+        status: hasInsufficientBalance ? 'waiting' : 'running',
+        insufficientBalance: hasInsufficientBalance,
+        potAmount: requiredAmount,
+        balance: currentBalance,
+        newBalance: hasInsufficientBalance ? currentBalance : newBalance,
+      });
+
+      if (!hasInsufficientBalance) {
         // Deduct pot amount from user balance
         updatePromises.push(
           User.update(
-            { balance: currentBalance - requiredAmount },
+            { balance: newBalance },
             {
               where: { id: user.id },
               transaction,
             }
           )
         );
+
+        // Update room user status to running
+        roomUserUpdatePromises.push(
+          RoomUser.update(
+            { status: 'running' },
+            {
+              where: { room_id: roomId, user_id: user.id },
+              transaction,
+            }
+          )
+        );
+
+        totalPotCollected += requiredAmount;
       }
     }
 
-    // If any user has insufficient balance, throw error
-    if (insufficientBalanceUsers.length > 0) {
-      throw new Error(
-        `Insufficient balance for users: ${insufficientBalanceUsers
-          .map((u) => `User ${u.userId} (Balance: ${u.currentBalance}, Required: ${u.requiredAmount})`)
-          .join(", ")}`
-      );
+    // Check if there are less than 2 players with sufficient balance
+    const playersWithSufficientBalance = roomUsers.length - insufficientBalanceCount;
+    if (playersWithSufficientBalance < 2) {
+      throw new Error("Need at least 2 players with sufficient balance to start the game");
     }
 
-    // Execute all balance updates
-    await Promise.all(updatePromises);
-
-    // Calculate total pot collected
-    const totalPotCollected = potAmount * roomUsers.length;
+    // Execute all balance updates and room user status updates
+    await Promise.all([...updatePromises, ...roomUserUpdatePromises]);
 
     // Update room pot amounts
     await Room.update(
       { 
-        current_pot_amount: totalPotCollected,
-        limit_pot_amount: potAmount
+        total_collected_amount: totalPotCollected,
+        room_status: 'running'
       },
       {
         where: { id: roomId },
@@ -118,15 +138,10 @@ const collectPotAmount = async (roomId, potAmount, transaction) => {
     );
 
     return {
-      success: true,
-      playersCount: roomUsers.length,
       totalPotCollected: totalPotCollected,
-      limitPotAmount: potAmount,
-      currentPotAmount: totalPotCollected,
+      PotAmount: potAmount,
+      players: usersList,
     };
-  } catch (error) {
-    throw error;
-  }
 };
 
 const removeUserFromRoom = async (userId, transaction) => {
