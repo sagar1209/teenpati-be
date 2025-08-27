@@ -277,6 +277,12 @@ const createPublicRoom = async (req, res) => {
           transaction,
         });
         socketHandlers.notifyUserJoinedRoom({ room, players, user });
+
+        // Check if we should start game countdown (2 players and room is waiting)
+        if (room.current_players == 2 && room.room_status === 'waiting') {
+          // Start 5-second countdown for game start
+          socketHandlers.startGameCountdown(room.id);
+        }
       }
     }
 
@@ -395,6 +401,12 @@ const joinPrivateRoom = async (req, res) => {
         email: req.user.email,
       };
       socketHandlers.notifyUserJoinedRoom({ room, players, user });
+
+      // Check if we should start game countdown (2 players and room is waiting)
+      if (room.current_players == 2 && room.room_status === 'waiting') {
+        // Start 5-second countdown for game start
+        socketHandlers.startGameCountdown(room.id);
+      }
     }
 
     await transaction.commit();
@@ -492,6 +504,16 @@ const leaveRoom = async (req, res) => {
         email: req.user.email,
       };
       socketHandlers.notifyUserLeftRoom({ room, players, user });
+    }
+
+    // check if room is waiting and current player less than 2 so send the socket wait for the game event
+    if (room.room_status == 'waiting' && room.current_players < 2) {
+      const socketHandlers = getSocketHandlers();
+      if (socketHandlers) {
+        socketHandlers.notifyWaitGame({ room, players });
+        // Cancel any active countdown since we don't have enough players
+        socketHandlers.cancelGameCountdown(room.id);
+      }
     }
 
     await transaction.commit();
@@ -625,6 +647,8 @@ const startGame = async (req, res) => {
     // Send real-time notification via Socket.IO
     const socketHandlers = getSocketHandlers();
     if (socketHandlers) {
+      // Cancel any active countdown since game is starting manually
+      socketHandlers.cancelGameCountdown(room.id);
       socketHandlers.notifyGameStarted({ room: updatedRoom, players: potCollectionResult.players});
     }
 

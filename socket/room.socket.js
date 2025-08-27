@@ -1,4 +1,8 @@
 const logger = require("../utils/logger.util");
+const { startGame } = require("../controllers/room.controller");
+
+// Store active countdown timers for rooms
+const activeCountdowns = new Map();
 
 const emitToUser = (userId, event, data) => {
   try {
@@ -155,6 +159,100 @@ const notifyGameStarted = async (value) => {
   }
 };
 
+const startGameCountdown = async (roomId) => {
+  try {
+    // Clear any existing countdown for this room
+    if (activeCountdowns.has(roomId)) {
+      clearTimeout(activeCountdowns.get(roomId).timer);
+      activeCountdowns.delete(roomId);
+    }
+
+    let countdown = 50;
+
+    const countdownInterval = setInterval(async () => {
+      countdown--;
+      
+      if (countdown > 0) {
+        // Send countdown update - only room ID and countdown needed
+        emitToRoom(roomId, "game_countdown_update", {
+          roomId,
+          countdown,
+          message: `Game starting in ${countdown} seconds...`
+        });
+        logger.info(`Game countdown update for room ${roomId} - ${countdown} seconds remaining`);
+      } else {
+        // Countdown finished, start the game
+        clearInterval(countdownInterval);
+        activeCountdowns.delete(roomId);
+        
+        try {
+          // Call the startGame controller function to handle game logic
+
+          // Notify room that GAME STARTED
+          emitToRoom(roomId, "game_started", {
+            roomId,
+            message: "Game started"
+          });
+          
+          const mockReq = {
+            body: { room_id: roomId }
+          };
+          const mockRes = {
+            status: () => mockRes,
+            json: () => mockRes
+          };
+          
+          await startGame(mockReq, mockRes);
+          logger.info(`Game started successfully for room ${roomId}`);
+        } catch (gameStartError) {
+          logger.error(`Failed to start game for room ${roomId}: ${gameStartError.message}`);
+        }
+      }
+    }, 1000);
+
+    // Store the countdown info
+    activeCountdowns.set(roomId, {
+      timer: countdownInterval,
+      countdown,
+    });
+
+  } catch (error) {
+    logger.error(`Error in startGameCountdown: ${error.message}`);
+  }
+};
+
+const cancelGameCountdown = (roomId) => {
+  try {
+    if (activeCountdowns.has(roomId)) {
+      const countdownInfo = activeCountdowns.get(roomId);
+      clearTimeout(countdownInfo.timer);
+      activeCountdowns.delete(roomId);
+      
+      logger.info(`Game countdown cancelled for room ${roomId}`);
+    }
+  } catch (error) {
+    logger.error(`Error in cancelGameCountdown: ${error.message}`);
+  }
+};
+
+
+const notifyWaitGame = async (value) => {
+  try {
+    const { room, players } = value;
+    const waitData = {
+      room,
+      players,
+      message: "Waiting for the game to start", 
+    };
+
+    // Notify all users in the room about wait for the game
+    emitToRoom(room.id, "wait_for_game", waitData);
+    logger.info(`Waiting for the game to start in room ${room.id}`);
+  } catch (error) {
+    logger.error(`Error in notifyWaitGame: ${error.message}`);
+  }
+};
+
 const roomSocketHandler = (io) => {
   // Store io instance globally for use in utility functions
   global.io = io;
@@ -174,6 +272,9 @@ const roomSocketHandler = (io) => {
     notifyGameStarted,
     emitToUser,
     emitToRoom,
+    notifyWaitGame,
+    startGameCountdown,
+    cancelGameCountdown,
   };
 };
 
