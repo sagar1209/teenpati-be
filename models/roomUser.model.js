@@ -27,7 +27,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('waiting', 'running'),
         allowNull: false,
         defaultValue: 'waiting'
-      }
+      },
+      cards: {
+        type: DataTypes.JSON,
+        allowNull: true,
+      },
+      card_value: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: "room_users",

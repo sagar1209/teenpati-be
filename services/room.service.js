@@ -161,6 +161,27 @@ const countRoom = async (query) => {
   return totalRows;
 };
 
+const updatePlayerCards = async (roomId, players, transaction) => {
+  const updatePromises = players.map(player => {
+    return RoomUser.update(
+      {
+        cards: player.cards,
+        card_value: player.card_value
+      },
+      {
+        where: { 
+          room_id: roomId,
+          user_id: player.user_id
+        },
+        transaction,
+      }
+    );
+  });
+  
+  const results = await Promise.all(updatePromises);
+  return results;
+};
+
 module.exports = {
   createRoom,
   findRoomUser,
@@ -169,6 +190,7 @@ module.exports = {
   findRoom,
   updateRoomById,
   updateAllRoomUsers,
+  updatePlayerCards,
   collectPotAmount,
   removeUserFromRoom,
   findAllRoom,

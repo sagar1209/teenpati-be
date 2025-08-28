@@ -1,5 +1,7 @@
 const logger = require("../utils/logger.util");
-const { startGame } = require("../controllers/room.controller");
+const { dealCards } = require("../utils/card.util");
+const { roomService } = require("../services");
+const { startGame, dealCardsToPlayers } = require("../controllers/room.controller");
 
 // Store active countdown timers for rooms
 const activeCountdowns = new Map();
@@ -150,7 +152,6 @@ const notifyGameStarted = async (value) => {
       room,
       players
     };
-
     // Notify all users in the room about game start
     emitToRoom(room.id, "collect_pot_amount", gameStartData);
     logger.info(`Game started in room ${room.id}`);
@@ -167,7 +168,7 @@ const startGameCountdown = async (roomId) => {
       activeCountdowns.delete(roomId);
     }
 
-    let countdown = 50;
+    let countdown = 10;
 
     const countdownInterval = setInterval(async () => {
       countdown--;
@@ -175,7 +176,9 @@ const startGameCountdown = async (roomId) => {
       if (countdown > 0) {
         // Send countdown update - only room ID and countdown needed
         emitToRoom(roomId, "game_countdown_update", {
-          roomId,
+          room : {
+            id : roomId,
+          },
           countdown,
           message: `Game starting in ${countdown} seconds...`
         });
@@ -186,14 +189,15 @@ const startGameCountdown = async (roomId) => {
         activeCountdowns.delete(roomId);
         
         try {
-          // Call the startGame controller function to handle game logic
-
           // Notify room that GAME STARTED
           emitToRoom(roomId, "game_started", {
             roomId,
             message: "Game started"
           });
           
+          logger.info(`Game started successfully for room ${roomId}`);
+          
+          // Call startGame to collect pot amounts from players
           const mockReq = {
             body: { room_id: roomId }
           };
@@ -203,7 +207,11 @@ const startGameCountdown = async (roomId) => {
           };
           
           await startGame(mockReq, mockRes);
-          logger.info(`Game started successfully for room ${roomId}`);
+          logger.info(`Pot amounts collected successfully for room ${roomId}`);
+          
+          // After pot collection is complete, deal cards to all players
+          await dealCardsToPlayers(roomId);
+          
         } catch (gameStartError) {
           logger.error(`Failed to start game for room ${roomId}: ${gameStartError.message}`);
         }
@@ -253,6 +261,23 @@ const notifyWaitGame = async (value) => {
   }
 };
 
+const notifyDealCards = async (value) => {
+  try {
+    const { roomId, players } = value;
+    const dealCardsData = {
+      roomId,
+      players,
+      message: "Cards dealt successfully",
+    };
+    // Notify all users in the room about deal cards
+    emitToRoom(roomId, "deal_cards", dealCardsData);
+    logger.info(`Cards dealt successfully in room ${roomId}`);
+  } catch (error) {
+    logger.error(`Error in notifyDealCards: ${error.message}`);
+  }
+};
+
+
 const roomSocketHandler = (io) => {
   // Store io instance globally for use in utility functions
   global.io = io;
@@ -275,6 +300,7 @@ const roomSocketHandler = (io) => {
     notifyWaitGame,
     startGameCountdown,
     cancelGameCountdown,
+    notifyDealCards,
   };
 };
 

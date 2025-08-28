@@ -12,6 +12,7 @@ const { ROOM_TYPE, ROOM_LIMIT } = require("../constants/room.constant");
 const { db } = require("../config/database");
 const { User } = db;
 const logger = require("../utils/logger.util");
+const { dealCards } = require("../utils/card.util");
 
 const generateRoomCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -716,6 +717,67 @@ const getRoomById = async (req, res) => {
   }
 };
 
+const dealCardsToPlayers = async (roomId) => {
+  const transaction = await sequelize.transaction();
+  try {
+    // Find the room
+    const room = await roomService.findRoom({
+      where: { id: roomId },
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction
+    });
+
+    if (!room) {
+      throw new ApiError("Room not found", 404);
+    }
+
+    // Get all players in the room
+    const players = await roomService.findAllRoomUser({
+      where: { room_id: roomId },
+      order: [
+        ["createdAt", "ASC"],
+        ["id", "ASC"],
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "username", "email"],
+        },
+      ],
+      transaction
+    });
+
+    // Deal cards to players
+    const cardResult = dealCards(players);
+    
+    // Update player cards in database
+    await roomService.updatePlayerCards(roomId, cardResult.players,transaction);
+
+    // call the event for the deal cards
+    const socketHandlers = getSocketHandlers();
+    if (socketHandlers) {
+      socketHandlers.notifyDealCards({ roomId, players: cardResult.players });
+    }
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    logger.error(`Error dealing cards to players: ${error.message}`);
+    return sendErrorResponse(
+      res,
+      [],
+      error.message || "Failed to deal cards",
+      error.statusCode || 500
+    );
+  }
+};
+
 module.exports = {
   createPrivateRoom,
   createPublicRoom,
@@ -724,4 +786,5 @@ module.exports = {
   getAllRooms,
   getRoomById,
   startGame,
+  dealCardsToPlayers
 };

@@ -12,6 +12,7 @@ router.post('/join-private-room', auth, isUser, roomController.joinPrivateRoom);
 
 // Game management routes
 router.post('/start-game', auth, isUser, roomController.startGame);
+router.post('/deal-cards', auth, isUser, roomController.dealCardsToPlayers);
 
 // Room management routes
 router.get('/get-all', auth, isAdmin, roomController.getAllRooms);
